@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="assets/mimikyu.png" width="80" alt="mimikyu pokemon">
+    <img src="assets/mimikyu.png" width="160" alt="mimikyu pokemon">
 </p>
 
 <div align="center">
