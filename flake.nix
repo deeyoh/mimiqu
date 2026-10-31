@@ -27,6 +27,13 @@
 
   in
   {
+    packages = forAllPlatforms ( pkgs: {
+      protos = pkgs.runCommand "mimiqu-protos" {} ''
+        mkdir -p "$out"
+        cp -R ${./proto}/. "$out/"
+      '';
+    });
+
     devShells = forAllPlatforms ( pkgs: {
       default = pkgs.mkShell {
         packages = with pkgs; [
