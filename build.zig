@@ -152,6 +152,16 @@ pub fn build(b: *std.Build) void {
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
 
+    const check = b.addExecutable(.{
+        .name = "check",
+        .root_module = exe.root_module,
+    });
+
+    check.generated_bin = .none;
+    const check_step = b.step("check", "Check for compilation errors");
+    check_step.dependOn(&check.step);
+
+
     const websocket_dep = b.dependency("websocket", .{
         .target = target,
         .optimize = optimize
