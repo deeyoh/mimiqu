@@ -1,0 +1,20 @@
+services:
+  lightpanda:
+    image: lightpanda/browser:latest
+    container_name: mimiqu-lightpanda
+
+    restart: unless-stopped
+
+    command:
+      - lightpanda
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9222"
+      - --cdp-max-connections
+      - "4"
+      - --obey-robots
+
+    ports:
+      - "127.0.0.1:9222:9222"

@@ -31,6 +31,7 @@
       default = pkgs.mkShell {
         packages = with pkgs; [
           git
+          docker-compose
 
           nixd
           nixfmt
