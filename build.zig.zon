@@ -36,6 +36,10 @@
             .url = "git+https://github.com/karlseguin/websocket.zig.git#f2b3bad6875595e8dd42c726e8e914885a8b0ba0",
             .hash = "websocket-0.1.0-ZPISdbERBQCnk2-UDVSJlOss6POs_aAJR2nrccYJ1wZm",
         },
+        .grpc_lite = .{
+            .url = "https://github.com/fanyang89/grpc-lite/archive/d64dc5e653c2a57bd34ee9a34a7b6ae7487b32fd.tar.gz",
+            .hash = "grpc_lite-0.4.0-BcwY0LNPMgCzmDzWhXgM9LzrE_6Ii_onIwMNdhtnVsAE",
+        },
     },
     .paths = .{
         "build.zig",

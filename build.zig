@@ -1,4 +1,5 @@
 const std = @import("std");
+const grpc_build = @import("grpc_lite");
 
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
@@ -161,6 +162,50 @@ pub fn build(b: *std.Build) void {
     const check_step = b.step("check", "Check for compilation errors");
     check_step.dependOn(&check.step);
 
+    const grpc_dep = b.dependency("grpc_lite", .{
+        .target = target,
+        .optimize = optimize,
+        .protobuf = true,
+    });
+
+    // Return while grpc-lite's lazy dependencies need fetching, before
+    // looking up modules that its build script has not registered yet.
+    _ = grpc_dep.builder.lazyDependency("protobuf", .{
+        .target = target,
+        .optimize = optimize,
+    }) orelse return;
+
+    _ = grpc_dep.builder.lazyDependency("protobuf", .{
+        .target = b.graph.host,
+        .optimize = optimize,
+    }) orelse return;
+
+    _ = grpc_dep.builder.lazyDependency("grpc_proto", .{}) orelse return;
+
+    const generated = grpc_build.createProtocStep(grpc_dep, target, optimize, .{
+        .source_files = &.{b.path("proto/mimiqu/v1/echo.proto")},
+        .include_directories = &.{b.path("proto")},
+        .destination_directory = b.path(".zig-cache/echo-proto"),
+    }) orelse return;
+
+    //would switch the root source file with the generated one
+    const proto = b.createModule(.{
+        .root_source_file = b.path(".zig-cache/echo-proto/mimiqu/v1.pb.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{
+            .name = "protobuf",
+            .module = grpc_dep.module("grpc_lite_protobuf_runtime"),
+        }},
+    });
+
+    exe.root_module.addImport("grpc_lite", grpc_dep.module("grpc_lite"));
+    exe.root_module.addImport("grpc_lite_protobuf", grpc_dep.module("grpc_lite_protobuf"));
+    exe.root_module.addImport("mimiqu_proto", proto);
+
+    exe.step.dependOn(generated.step);
+    check.step.dependOn(generated.step);
+    exe_tests.step.dependOn(generated.step);
 
     const websocket_dep = b.dependency("websocket", .{
         .target = target,

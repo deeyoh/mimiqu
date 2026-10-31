@@ -1,5 +1,5 @@
 {
-  description = "mimique flake";
+  description = "mimiqu flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -40,6 +40,9 @@
 
           zls
           zigpkgs."0.17.0"
+
+          cmake
+          ninja
         ];
       };
     });
