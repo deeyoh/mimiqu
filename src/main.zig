@@ -9,6 +9,8 @@ const grpc_pb = @import("grpc_lite_protobuf");
 
 const CdpClient = @import("CdpClient.zig");
 
+const VersionService = @import("services/VersionService.zig");
+
 const AppError = error{OutOfMemory};
 const State = struct {
     allocator: std.mem.Allocator,
@@ -23,6 +25,28 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator;
     var state = State{ .allocator = allocator };
 
+    var server = try grpc.Server.init(allocator, .{
+        .host = "127.0.0.1",
+        .port = 50051
+    });
+    defer server.deinit();
+
+
+    var version_service = VersionService{
+        .allocator = allocator,
+    };
+
+    var version_registration = grpc_pb.ServiceRegistration(VersionService.Api).init(
+        allocator,
+        &version_service,
+        .{ .GetVersion = VersionService.getVersion },
+        .{},
+    );
+    defer version_registration.deinit();
+
+    try version_registration.register(&server);
+
+
     var registration = grpc_pb.ServiceRegistration(EchoApi).init(
         allocator,
         &state,
@@ -30,12 +54,6 @@ pub fn main() !void {
         .{},
     );
     defer registration.deinit();
-
-    var server = try grpc.Server.init(allocator, .{
-        .host = "127.0.0.1",
-        .port = 50051
-    });
-    defer server.deinit();
 
     try registration.register(&server);
     try server.start();

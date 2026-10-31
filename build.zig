@@ -1,5 +1,6 @@
 const std = @import("std");
 const grpc_build = @import("grpc_lite");
+const ProtocolVersion = @import("src/build/ProtocolVersion.zig");
 
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
@@ -153,6 +154,9 @@ pub fn build(b: *std.Build) void {
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
 
+    const protocol_version = ProtocolVersion.init(b);
+    exe.root_module.addOptions("build_options", protocol_version.options);
+
     const check = b.addExecutable(.{
         .name = "check",
         .root_module = exe.root_module,
@@ -183,14 +187,18 @@ pub fn build(b: *std.Build) void {
     _ = grpc_dep.builder.lazyDependency("grpc_proto", .{}) orelse return;
 
     const generated = grpc_build.createProtocStep(grpc_dep, target, optimize, .{
-        .source_files = &.{b.path("proto/mimiqu/v1/echo.proto")},
+        .source_files = &.{
+            b.path("proto/mimiqu/v1/echo.proto"),
+            b.path("proto/mimiqu/v1/scrape.proto"),
+            b.path("proto/mimiqu/v1/version.proto"),
+        },
         .include_directories = &.{b.path("proto")},
-        .destination_directory = b.path(".zig-cache/echo-proto"),
+        .destination_directory = b.path(".zig-cache/mimiqu-proto"),
     }) orelse return;
 
     //would switch the root source file with the generated one
     const proto = b.createModule(.{
-        .root_source_file = b.path(".zig-cache/echo-proto/mimiqu/v1.pb.zig"),
+        .root_source_file = b.path(".zig-cache/mimiqu-proto/mimiqu/v1.pb.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{.{

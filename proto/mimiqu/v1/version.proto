@@ -1,0 +1,12 @@
+syntax = "proto3";
+package mimiqu.v1;
+
+message GetVersionRequest {}
+message GetVersionResponse { 
+  string version = 1; 
+  uint32 protocol_version = 2;
+}
+
+service VersionService {
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
+}
