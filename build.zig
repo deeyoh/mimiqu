@@ -151,4 +151,11 @@ pub fn build(b: *std.Build) void {
     //
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
+
+    const websocket_dep = b.dependency("websocket", .{
+        .target = target,
+        .optimize = optimize
+    });
+
+    exe.root_module.addImport("websocket", websocket_dep.module("websocket"));
 }
