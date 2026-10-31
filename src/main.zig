@@ -13,5 +13,13 @@ pub fn main(init: std.process.Init) !void {
     };
     defer cdp.deinit();
 
-    std.debug.print("cdp: {any}\n", .{cdp});
+    const response = try cdp.send("Browser.getVersion", struct {}{});
+    defer response.deinit();
+    std.debug.print("response: {any}\n", .{response.value});
+
+    // const navi_response = try cdp.page_navigate("https://lightpanda.io/docs/reference/cli/serve");
+    // defer navi_response.deinit();
+    // std.debug.print("response: {any}\n", .{navi_response.value});
+
+    // std.debug.print("cdp: {any}\n", .{cdp});
 }
