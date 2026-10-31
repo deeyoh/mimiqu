@@ -13,24 +13,32 @@
   };
 
   outputs = { self, nixpkgs, zig, ... }: let
-    system = "aarch64-darwin";
-  in
-  {
-    devShells."${system}".default = let
-      pkgs = import nixpkgs {
+    platforms = [
+      "x86_64-linux"
+      "aarch64-darwin"
+    ];
+
+    forAllPlatforms = f: nixpkgs.lib.genAttrs platforms (
+      system: f (import nixpkgs {
         inherit system;
         overlays = [ zig.overlays.default ];
+      })
+    );
+
+  in
+  {
+    devShells = forAllPlatforms ( pkgs: {
+      default = pkgs.mkShell {
+        packages = with pkgs; [
+          git
+
+          nixd
+          nixfmt
+
+          zls
+          zigpkgs."0.17.0"
+        ];
       };
-    in pkgs.mkShell {
-      packages = with pkgs; [
-        git
-
-        nixd
-        nixfmt
-
-        zls
-        zigpkgs."0.17.0"
-      ];
-    };
+    });
   };
 }
