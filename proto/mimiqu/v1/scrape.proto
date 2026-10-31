@@ -1,0 +1,32 @@
+syntax = "proto3";
+package mimiqu.v1;
+
+service ScraperService {
+  rpc Scrape(ScrapeRequest) returns (ScrapeResponse);
+}
+
+message ScrapeRequest {
+  string url = 1;
+  repeated ExtractionField fields = 2;
+  uint32 timeout_ms = 3;
+}
+
+message ExtractionField {
+  string name = 1;
+  string selector = 2;
+  ExtractionType type = 3;
+  string attribute = 4;
+  bool required = 5;
+}
+
+enum ExtractionType {
+  EXTRACTION_TYPE_UNSPECIFIED = 0;
+  EXTRACTION_TYPE_TEXT = 1;
+  EXTRACTION_TYPE_ATTRIBUTE = 2;
+  EXTRACTION_TYPE_HTML = 3;
+}
+
+message ScrapeResponse {
+  string url = 1;
+  string data_json = 2;
+}

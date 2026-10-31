@@ -33,6 +33,8 @@
           git
           docker-compose
 
+          buf
+
           nixd
           nixfmt
 
