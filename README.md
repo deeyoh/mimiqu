@@ -9,5 +9,5 @@
 </div>
 
 <p align="center">
-    <strong>Low resource web scraper</strong>
+    <strong>Low resource web scraper with Lightpanda</strong>
 </p>
