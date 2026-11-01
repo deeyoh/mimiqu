@@ -50,6 +50,21 @@ pub fn deinit(self: *BrowserPool) void {
     self.allocator.free(self.context_slots);
 }
 
+pub fn acquire_slot(self: *BrowserPool) !*BrowserCtxSlot {
+    for (self.context_slots) |*slot| {
+        if (!slot.busy) {
+            slot.busy = true;
+            return slot;
+        }
+    }
+    return error.NoAvailableBrowserCtxSlot;
+}
+
+pub fn release_slot(self: *BrowserPool, slot: *BrowserCtxSlot) void {
+    _ = self;
+    slot.busy = false;
+}
+
 fn destroySlot(
     allocator: std.mem.Allocator,
     cdp: *CdpClient,
@@ -66,7 +81,7 @@ fn createSlot(
     allocator: std.mem.Allocator,
     cdp: *CdpClient,
 ) !BrowserCtxSlot {
-    const browser_ctx_res = try cdp.send("Target.createBrowserContext", struct{}{});
+    const browser_ctx_res = try cdp.send(null, "Target.createBrowserContext", struct{}{});
     defer browser_ctx_res.deinit();
 
     const ctx_result = try getResult(browser_ctx_res.value);
@@ -80,7 +95,7 @@ fn createSlot(
     // the browser context stays alive in Chrome with nothing tracking it -> cleanup.
     errdefer diposeContext(cdp, ctx_id);
 
-    const create_target_res = try cdp.send("Target.createTarget", .{
+    const create_target_res = try cdp.send(null, "Target.createTarget", .{
         .url = "about:blank",
         .browserContextId = ctx_id,
     });
@@ -96,7 +111,7 @@ fn createSlot(
 
 
     //attach to target for session
-    const attach_res = try cdp.send("Target.attachToTarget", .{
+    const attach_res = try cdp.send(null, "Target.attachToTarget", .{
         .targetId = target_id,
         .flatten = true
     });
@@ -129,7 +144,7 @@ fn createSlot(
 
 //a best effort cleanup. If connection is broken, remote cleanup may not be possible
 fn diposeContext(cdp: *CdpClient, context_id: []const u8) void {
-    const response = cdp.send("Target.disposeBrowserContext", .{
+    const response = cdp.send(null, "Target.disposeBrowserContext", .{
         .browserContextId = context_id,
     }) catch |err| {
         std.log.err(

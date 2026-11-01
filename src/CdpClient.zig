@@ -53,8 +53,18 @@ pub fn deinit(self: *CdpClient) void {
 //     return response;
 // }
 
+pub fn sendToSession(
+    self: *CdpClient,
+    session_id: []const u8,
+    method: []const u8,
+    params: anytype,
+) !std.json.Parsed(std.json.Value) {
+    return self.send(session_id, method, params);
+}
+
 pub fn send(
     self: *CdpClient,
+    session_id: ?[]const u8,
     method: []const u8,
     params: anytype,
 ) !std.json.Parsed(std.json.Value) {
@@ -65,9 +75,10 @@ pub fn send(
         .id = id,
         .method = method,
         .params = params,
+        .sessionId = session_id,
     };
 
-    const payload = try std.json.Stringify.valueAlloc(self.allocator, command, .{});
+    const payload = try std.json.Stringify.valueAlloc(self.allocator, command, .{ .emit_null_optional_fields = false });
     defer self.allocator.free(payload);
 
     std.debug.print("sending: {s}\n", .{payload});

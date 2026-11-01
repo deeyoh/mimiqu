@@ -57,7 +57,7 @@ pub fn main(init: std.process.Init) !void {
     };
     defer cdp.deinit();
 
-    const response = try cdp.send("Browser.getVersion", struct {}{});
+    const response = try cdp.send(null, "Browser.getVersion", struct {}{});
     defer response.deinit();
 
     var browser_pool = try BrowserPool.init(init.gpa, &cdp, 1);
@@ -67,6 +67,38 @@ pub fn main(init: std.process.Init) !void {
         "BrowserPool",
         browser_pool.context_slots.len,
     });
+
+    {
+        const slot = try browser_pool.acquire_slot();
+        defer browser_pool.release_slot(slot);
+
+        const navigate_res = try cdp.sendToSession(slot.session_id, "Page.navigate", .{ .url = "https://example.com" });
+        defer navigate_res.deinit();
+
+        if (navigate_res.value != .object) {
+            return error.InvalidResponse;
+        }
+
+        if (navigate_res.value.object.get("error")) |cdp_error| {
+            std.log.err("Page.navigate failed: {any}", .{cdp_error});
+            return error.CdpCommandFailed;
+        }
+
+        const result = response.value.object.get("result") orelse return error.InvalidResponse;
+
+        if (result != .object) {
+            return error.InvalidResponse;
+        }
+
+        if (result.object.get("errorText")) |error_text| {
+            if (error_text != .string) return error.InvalidResponse;
+
+            std.log.err("Navigation failed: {s}", .{error_text.string});
+            return error.NavigationFailed;
+        }
+
+        std.log.info("Navigation accepted", .{});
+    }
 
     server.wait();
 }
