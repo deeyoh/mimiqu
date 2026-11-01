@@ -8,6 +8,7 @@ const grpc = @import("grpc_lite");
 const grpc_pb = @import("grpc_lite_protobuf");
 
 const CdpClient = @import("CdpClient.zig");
+const BrowserPool = @import("BrowserPool.zig");
 
 const VersionService = @import("services/VersionService.zig");
 const EchoService = @import("services/EchoService.zig");
@@ -59,24 +60,13 @@ pub fn main(init: std.process.Init) !void {
     const response = try cdp.send("Browser.getVersion", struct {}{});
     defer response.deinit();
 
+    var browser_pool = try BrowserPool.init(init.gpa, &cdp, 1);
+    defer browser_pool.deinit();
+
+    std.log.info("{s: >12} {d} browser contexts ready", .{
+        "BrowserPool",
+        browser_pool.context_slots.len,
+    });
+
     server.wait();
 }
-
-// pub fn main(init: std.process.Init) !void {
-//     const io = init.io;
-//     var cdp = CdpClient.init(io, init.gpa) catch |err| {
-//         std.log.err("Failed to connect to CDP: {s}", .{@errorName(err)});
-//         return err;
-//     };
-//     defer cdp.deinit();
-//
-//     const response = try cdp.send("Browser.getVersion", struct {}{});
-//     defer response.deinit();
-//     std.debug.print("response: {any}\n", .{response.value});
-//
-//     // const navi_response = try cdp.pageNavigate("https://lightpanda.io/docs/reference/cli/serve");
-//     // defer navi_response.deinit();
-//     // std.debug.print("response: {any}\n", .{navi_response.value});
-//
-//     // std.debug.print("cdp: {any}\n", .{cdp});
-// }
