@@ -10,20 +10,10 @@ const grpc_pb = @import("grpc_lite_protobuf");
 const CdpClient = @import("CdpClient.zig");
 
 const VersionService = @import("services/VersionService.zig");
-
-const AppError = error{OutOfMemory};
-const State = struct {
-    allocator: std.mem.Allocator,
-
-    fn echo(self: *State, request: proto.EchoRequest) AppError!proto.EchoResponse {
-        return .{ .message = try self.allocator.dupe(u8, request.message) };
-    }
-};
-const EchoApi = proto.EchoService(State, AppError);
+const EchoService = @import("services/EchoService.zig");
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
-    var state = State{ .allocator = allocator };
 
     var server = try grpc.Server.init(allocator, .{
         .host = "127.0.0.1",
@@ -31,31 +21,34 @@ pub fn main() !void {
     });
     defer server.deinit();
 
-
+    // == version service ==
     var version_service = VersionService{
         .allocator = allocator,
     };
-
-    var version_registration = grpc_pb.ServiceRegistration(VersionService.Api).init(
+    var version_registration:VersionService.Registration = undefined;
+    try version_service.initAndRegister(
         allocator,
-        &version_service,
-        .{ .GetVersion = VersionService.getVersion },
-        .{},
+        &server,
+        &version_registration,
     );
     defer version_registration.deinit();
 
-    try version_registration.register(&server);
 
-
-    var registration = grpc_pb.ServiceRegistration(EchoApi).init(
+    // == echo service ==
+    var echo_service = EchoService{
+        .allocator = allocator,
+    };
+    var echo_registration: EchoService.Registration = undefined;
+    try echo_service.initAndRegister(
         allocator,
-        &state,
-        .{ .Echo = State.echo },
-        .{},
+        &server,
+        &echo_registration,
     );
-    defer registration.deinit();
+    defer echo_registration.deinit();
 
-    try registration.register(&server);
+    // ==
+    // Server start
+    // ==
     try server.start();
 
     std.debug.print("gRPC listening on 127.0.0.1:50051\n", .{});
