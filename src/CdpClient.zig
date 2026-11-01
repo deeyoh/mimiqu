@@ -27,7 +27,7 @@ pub fn deinit(self: *CdpClient) void {
     self.client.deinit();
 }
 
-// pub fn page_navigate(self: *CdpClient, url: []const u8) !std.json.Parsed(std.json.Value) {
+// pub fn pageNavigate(self: *CdpClient, url: []const u8) !std.json.Parsed(std.json.Value) {
 //     const response = try self.send("Page.navigate", .{
 //         .url = url,
 //     });

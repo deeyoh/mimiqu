@@ -34,5 +34,6 @@ pub fn echo(
     self: *EchoService,
     request: proto.EchoRequest,
 ) Error!proto.EchoResponse {
+    std.debug.print("Received echo request: {s}\n", .{request.message});
     return .{ .message = try self.allocator.dupe(u8, request.message) };
 }

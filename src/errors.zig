@@ -1,3 +1,1 @@
-pub const AppError = error{
-    OutOfMemory
-};
+pub const AppError = error{OutOfMemory};
