@@ -86,6 +86,7 @@ pub fn start(self: *BrowserPool) !void {
         try self.group.concurrent(self.io, BrowserWorker.run, .{
             worker,
             self.io,
+            self.allocator,
             &self.jobs,
             // &self.results,
         });
