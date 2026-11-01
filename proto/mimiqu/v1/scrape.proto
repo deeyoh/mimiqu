@@ -6,9 +6,10 @@ service ScraperService {
 }
 
 message ScrapeRequest {
-  string url = 1;
-  repeated ExtractionField fields = 2;
-  uint32 timeout_ms = 3;
+  uint32 id = 1;
+  string url = 2;
+  repeated ExtractionField fields = 3;
+  uint32 timeout_ms = 4;
 }
 
 message ExtractionField {
