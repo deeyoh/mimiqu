@@ -1,202 +1,110 @@
 const BrowserPool = @This();
 
 const std = @import("std");
+const ScrapeSpec = @import("ScrapeSpec.zig");
+const ScrapeResult = @import("ScrapeResult.zig");
+const BrowserWorker = @import("BrowserWorker.zig");
 const CdpClient = @import("CdpClient.zig");
 
-const BrowserCtxSlot = struct {
-    context_id: []const u8,
-    target_id: []const u8,
-    session_id: []const u8,
-    busy: bool = false,
-};
+const Allocator = std.mem.Allocator;
 
 allocator: std.mem.Allocator,
-cdp: *CdpClient,
-context_slots: []BrowserCtxSlot,
+io: std.Io,
+
+workers: []BrowserWorker,
+
+jobs: std.Io.Queue(ScrapeSpec),
+results: std.Io.Queue(ScrapeResult),
+
+job_storage: []ScrapeSpec,
+result_storage: []ScrapeResult,
+
+group: std.Io.Group = .init,
 
 pub fn init(
-    allocator: std.mem.Allocator,
-    cdp: *CdpClient,
-    size: usize,
+    allocator: Allocator,
+    io: std.Io,
+    endpoint: []const u8,
+    pool_size: usize,
 ) !BrowserPool {
-    if (size == 0) return error.InvalidPoolSize;
+    const workers = try allocator.alloc(BrowserWorker, pool_size);
+    errdefer allocator.free(workers);
 
-    const context_slots = try allocator.alloc(BrowserCtxSlot, size);
-    errdefer allocator.free(context_slots);
+    const job_storage = try allocator.alloc(ScrapeSpec, pool_size * 4);
+    errdefer allocator.free(job_storage);
 
-    var initialized_count: usize = 0;
+    const result_storage = try allocator.alloc(ScrapeResult, pool_size * 4);
+    errdefer allocator.free(result_storage);
+
+    //@TODO: Switch to more robust system, right now just expects a simple host:port
+    const separator = std.mem.findScalarLast(u8, endpoint, ':')
+        orelse return error.MissingPort;
+
+    const host = endpoint[0..separator];
+    if (host.len == 0) return error.MissingHost;
+
+    const port = try std.fmt.parseInt(
+        u16,
+        endpoint[separator + 1..],
+        10,
+    );
+
+    var initialized: usize = 0;
+
     errdefer {
-        for (context_slots[0..initialized_count]) |slot| {
-            destroySlot(allocator, cdp, slot);
+        for(workers[0..initialized]) |*worker| {
+            worker.cdp.deinit();
         }
     }
 
-    for (context_slots) |*slot| {
-        slot.* = try createSlot(allocator, cdp);
-        initialized_count += 1;
+    for (workers, 0..) |*worker, index| {
+        worker.* = .{
+            .id = index,
+            .cdp = try CdpClient.connect(
+                io,
+                allocator,
+                host,
+                port,
+            )
+        };
+        initialized += 1;
     }
 
     return .{
         .allocator = allocator,
-        .cdp = cdp,
-        .context_slots = context_slots,
+        .io = io,
+        .workers = workers,
+        .jobs = .init(job_storage),
+        .results = .init(result_storage),
+        .job_storage = job_storage,
+        .result_storage = result_storage
     };
 }
 
-pub fn deinit(self: *BrowserPool) void {
-    for (self.context_slots) |slot| {
-        destroySlot(self.allocator, self.cdp, slot);
+pub fn start(self: *BrowserPool) !void {
+    for (self.workers) |*worker| {
+        try self.group.concurrent(self.io, BrowserWorker.run, .{
+            worker,
+            self.io,
+            self.allocator,
+            &self.jobs,
+            // &self.results,
+        });
     }
-    self.allocator.free(self.context_slots);
 }
 
-pub fn acquire_slot(self: *BrowserPool) !*BrowserCtxSlot {
-    for (self.context_slots) |*slot| {
-        if (!slot.busy) {
-            slot.busy = true;
-            return slot;
-        }
-    }
-    return error.NoAvailableBrowserCtxSlot;
-}
+pub fn shutdown(self: *BrowserPool) !void {
+    self.jobs.close(self.io);
 
-pub fn release_slot(self: *BrowserPool, slot: *BrowserCtxSlot) void {
-    _ = self;
-    slot.busy = false;
-}
+    try self.group.await(self.io);
 
-fn destroySlot(
-    allocator: std.mem.Allocator,
-    cdp: *CdpClient,
-    slot: BrowserCtxSlot,
-) void {
-    diposeContext(cdp, slot.context_id);
+    self.results.close(self.io);
 
-    allocator.free(slot.context_id);
-    allocator.free(slot.target_id);
-    allocator.free(slot.session_id);
-}
-
-fn createSlot(
-    allocator: std.mem.Allocator,
-    cdp: *CdpClient,
-) !BrowserCtxSlot {
-    const browser_ctx_res = try cdp.send(null, "Target.createBrowserContext", struct{}{});
-    defer browser_ctx_res.deinit();
-
-    const ctx_result = try getResult(browser_ctx_res.value);
-    const ctx_id_val = try getField(ctx_result, "browserContextId");
-
-    if (ctx_id_val != .string) {
-        return error.InvalidResponse;
-    }
-    const ctx_id = ctx_id_val.string;
-    // at this point Chrome has already created the browser context. If anything after this extraction fails,
-    // the browser context stays alive in Chrome with nothing tracking it -> cleanup.
-    errdefer diposeContext(cdp, ctx_id);
-
-    const create_target_res = try cdp.send(null, "Target.createTarget", .{
-        .url = "about:blank",
-        .browserContextId = ctx_id,
-    });
-    defer create_target_res.deinit();
-
-    const create_target_result = try getResult(create_target_res.value);
-    const target_id_val = try getField(create_target_result, "targetId");
-
-    if (target_id_val != .string) {
-        return error.InvalidResponse;
-    }
-    const target_id = target_id_val.string;
-
-
-    //attach to target for session
-    const attach_res = try cdp.send(null, "Target.attachToTarget", .{
-        .targetId = target_id,
-        .flatten = true
-    });
-    defer attach_res.deinit();
-
-    const attach_result = try getResult(attach_res.value);
-    const session_id_val = try getField(attach_result, "sessionId");
-
-    if (session_id_val != .string) {
-        return error.InvalidResponse;
-    }
-    const session_id = session_id_val.string;
-
-
-    const owned_ctx_id = try allocator.dupe(u8, ctx_id);
-    errdefer allocator.free(owned_ctx_id);
-
-    const owned_target_id = try allocator.dupe(u8, target_id);
-    errdefer allocator.free(owned_target_id);
-
-    const owned_session_id = try allocator.dupe(u8, session_id);
-    errdefer allocator.free(owned_session_id);
-
-    return .{
-        .context_id = owned_ctx_id,
-        .target_id = owned_target_id,
-        .session_id = owned_session_id,
-    };
-}
-
-//a best effort cleanup. If connection is broken, remote cleanup may not be possible
-fn diposeContext(cdp: *CdpClient, context_id: []const u8) void {
-    const response = cdp.send(null, "Target.disposeBrowserContext", .{
-        .browserContextId = context_id,
-    }) catch |err| {
-        std.log.err(
-            "Failed to dispose browser context {s}: {s}",
-            .{ context_id, @errorName(err) },
-        );
-        return;
-    };
-    defer response.deinit();
-
-    _ = getResult(response.value) catch |err| {
-        std.log.err(
-            "Invalid or failed dispose response for context {s}: {s}",
-            .{ context_id, @errorName(err) },
-        );
-        return;
-    };
-}
-
-/// CDP protocol returns answers in the following structure:
-///
-/// ```
-/// {
-///     "id": 2,
-///     "result": {
-///         ...
-///     }
-/// }
-/// ```
-fn getResult(response: std.json.Value) !std.json.Value {
-    if (response != .object) {
-        return error.InvalidResponse;
+    for (self.workers) |*worker| {
+        worker.cdp.deinit();
     }
 
-    if (response.object.get("error")) |cdp_error| {
-        std.log.err("CDP command failed: {any}", .{cdp_error});
-        return error.CdpCommandFailed;
-    }
-
-    const result = try getField(response, "result");
-    if (result != .object) return error.InvalidResponse;
-    return result;
-}
-
-fn getField(
-    value: std.json.Value,
-    key: []const u8,
-) !std.json.Value {
-    if (value != .object) {
-        return error.InvalidResponse;
-    }
-
-    return value.object.get(key)
-        orelse error.InvalidResponse;
+    self.allocator.free(self.workers);
+    self.allocator.free(self.job_storage);
+    self.allocator.free(self.result_storage);
 }
