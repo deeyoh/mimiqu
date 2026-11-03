@@ -21,7 +21,7 @@ pub fn main(init: std.process.Init) !void {
     var server = try grpc.Server.init(allocator, .{ .host = "127.0.0.1", .port = 50051 });
     defer server.deinit();
 
-    var pool = try BrowserPool.init(allocator, init.io, "127.0.0.1:9222", 1);
+    var pool = try BrowserPool.init(allocator, init.io, "127.0.0.1:9222", 4);
     defer pool.shutdown() catch {};
 
     for (pool.workers) |*worker| {
