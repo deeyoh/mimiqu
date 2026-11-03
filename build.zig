@@ -1,6 +1,7 @@
 const std = @import("std");
 const grpc_build = @import("grpc_lite");
 const ProtocolVersion = @import("src/build/ProtocolVersion.zig");
+const JavaScriptEmbedStep = @import("src/build/JavaScriptEmbedStep.zig");
 
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
@@ -221,4 +222,22 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.root_module.addImport("websocket", websocket_dep.module("websocket"));
+
+    const js_gen = JavaScriptEmbedStep.create(b, .{
+        .directory = b.path("scripts"),
+        .files = &.{
+            "extract.ts",
+            "wait-ready.ts",
+        },
+        //will be placed into `zig-out/scripts`
+        .out_dir = "scripts",
+    });
+
+    b.getInstallStep().dependOn(js_gen.step);
+
+    for (js_gen.js_files) |js_file| {
+        exe.root_module.addAnonymousImport(js_file.name, .{
+            .root_source_file = js_file.path,
+        });
+    }
 }

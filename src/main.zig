@@ -9,6 +9,7 @@ const grpc_pb = @import("grpc_lite_protobuf");
 
 const CdpClient = @import("CdpClient.zig");
 const BrowserPool = @import("BrowserPool.zig");
+const ScrapeBackend = @import("ScrapeBackend.zig");
 
 const VersionService = @import("services/VersionService.zig");
 const EchoService = @import("services/EchoService.zig");
@@ -20,14 +21,14 @@ pub fn main(init: std.process.Init) !void {
     var server = try grpc.Server.init(allocator, .{ .host = "127.0.0.1", .port = 50051 });
     defer server.deinit();
 
-    var pool = try BrowserPool.init(
-        allocator,
-        init.io,
-        "127.0.0.1:9222",
-        1
-    );
-    try pool.start();
+    var pool = try BrowserPool.init(allocator, init.io, "127.0.0.1:9222", 1);
     defer pool.shutdown() catch {};
+
+    for (pool.workers) |*worker| {
+        worker.scrape_fn = ScrapeBackend.scrape;
+    }
+
+    try pool.start();
 
     // == version service ==
     var version_service = VersionService{
@@ -58,16 +59,26 @@ pub fn main(init: std.process.Init) !void {
         .allocator = allocator,
         .pool = &pool,
     };
-    var scrape_registgration: ScrapeService.Registration = undefined;
-    try scrape_service.initAndRegister(allocator, &server, &scrape_registgration);
-    defer scrape_registgration.deinit();
+    defer scrape_service.deinit();
+    try scrape_service.register(&server);
 
     // ==
     // Server start
     // ==
     try server.start();
+    // Stop callbacks before service cleanup. Pool workers release retained
+    // calls before the earlier server.deinit() runs.
+    defer {
+        server.shutdown();
+        server.wait();
+    }
 
     std.debug.print("gRPC listening on 127.0.0.1:50051\n", .{});
 
     server.wait();
+}
+
+test {
+    _ = @import("ScrapeJob.zig");
+    _ = @import("BrowserPool.zig");
 }

@@ -48,6 +48,10 @@
           zls
           zigpkgs."0.17.0"
 
+          nodejs_24
+          typescript-language-server
+          typescript
+
           cmake
           ninja
         ];
